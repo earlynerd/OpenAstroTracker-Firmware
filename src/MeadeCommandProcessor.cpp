@@ -571,8 +571,9 @@ bool gpsAqcuisitionComplete(int &indicator);  // defined in c72_menuHA_GPS.hpp
 //      Description:
 //        Park Scope and stop motors
 //      Information:
-//        This slews the scope back to it's home position (RA ring centered, DEC
-//        at 90, basically pointing at celestial pole) and stops all movement (including tracking).
+//        This slews the scope back to it's home position (RA ring centered, DEC at 90, basically
+//        pointing at celestial pole), then advances to the parking position (defined by the Homing offsets)
+//        and stops all movement (including tracking).
 //      Returns:
 //        nothing
 //
@@ -757,13 +758,13 @@ bool gpsAqcuisitionComplete(int &indicator);  // defined in c72_menuHA_GPS.hpp
 //      Returns:
 //        "float#" or "float|float#"
 //
-// :XGDP#
+// :XGDP# (obsolete, disabled)
 //      Description:
 //        Get DEC parking position
 //      Information:
 //        Gets the number of steps from the home position to the parking position for DEC
 //      Returns:
-//        "long#"
+//        "0#"
 //
 // :XGS#
 //      Description:
@@ -801,9 +802,25 @@ bool gpsAqcuisitionComplete(int &indicator);  // defined in c72_menuHA_GPS.hpp
 //      Description:
 //        Get RA Homing offset
 //      Information:
-//        Get the RA ring homing offset for Hall sensor auto homing
+//        Get the RA ring homing offset.
+//        If a Hall sensor is present this is the number of steps from the center of the sensor range to
+//        where the actual center position is located.
+//        If no Hall sensor is present this is the number of steps from the power on position of the RA axis to
+//        where the actual center position is located.
 //      Returns:
-//        "n#" - the number of steps from the center of the hall sensor trigger range to the home position.
+//        "n#" - the number of steps
+//
+// :XGHD#
+//      Description:
+//        Get DEC Homing offset
+//      Information:
+//        Get the DEC ring homing offset.
+//        If a Hall sensor is present this is the number of steps from the center of the sensor range to
+//        where the actual center position is located.
+//        If no Hall sensor is present this is the number of steps from the power on position of the DEC axis to
+//        where the actual center position is located.
+//      Returns:
+//        "n#" - the number of steps
 //
 // :XGHS#
 //      Description:
@@ -958,7 +975,7 @@ bool gpsAqcuisitionComplete(int &indicator);  // defined in c72_menuHA_GPS.hpp
 //      Returns:
 //        nothing
 //
-// :XSDPnnnn#
+// :XSDPnnnn# (obsolete, disabled)
 //      Description:
 //        Set DEC parking position offset
 //      Information:
@@ -1512,6 +1529,7 @@ String MeadeCommandProcessor::handleMeadeMovement(String inCmd)
         if (inCmd[1] == 'L')  // :MAL
         {
             float arcMinute = inCmd.substring(2).toFloat();
+            LOG(DEBUG_MEADE, "[MEADE]: Move ALT by %f arcmins", arcMinute);
             _mount->moveBy(ALTITUDE_STEPS, arcMinute);
         }
 #endif
@@ -1558,7 +1576,7 @@ String MeadeCommandProcessor::handleMeadeMovement(String inCmd)
     else if ((inCmd[0] == 'H') && (inCmd.length() > 2) && inCmd[1] == 'R')
     {
 #if USE_HALL_SENSOR_RA_AUTOHOME == 1
-        int distance = 30;
+        int distance = RA_HOMING_SENSOR_SEARCH_DEGREES;
         if (inCmd.length() > 3)
         {
             distance = clamp((int) inCmd.substring(3).toInt(), 15, 75);
@@ -1579,7 +1597,7 @@ String MeadeCommandProcessor::handleMeadeMovement(String inCmd)
     else if ((inCmd[0] == 'H') && (inCmd.length() > 2) && inCmd[1] == 'D')
     {
 #if USE_HALL_SENSOR_DEC_AUTOHOME == 1
-        int decDistance = 30;
+        int decDistance = DEC_HOMING_SENSOR_SEARCH_DEGREES;
         if (inCmd.length() > 3)
         {
             decDistance = clamp((int) inCmd.substring(3).toInt(), 15, 75);
@@ -1700,7 +1718,7 @@ String MeadeCommandProcessor::handleMeadeExtraCommands(String inCmd)
                 }
                 if (inCmd[2] == 'P')  // :XGDP#
                 {
-                    return String(_mount->getDecParkingOffset()) + "#";
+                    return "0#";
                 }
             }
             else  // :XGD#
@@ -1758,21 +1776,27 @@ String MeadeCommandProcessor::handleMeadeExtraCommands(String inCmd)
         {
             if (inCmd.length() > 2)
             {
+                LOG(DEBUG_MOUNT, "[MEADE]: XGH  -> %s", inCmd.c_str());
                 if (inCmd[2] == 'R')  // :XGHR#
                 {
+                    LOG(DEBUG_MOUNT, "[MEADE]: XGHR  -> %s", inCmd.c_str());
                     return String(_mount->getHomingOffset(StepperAxis::RA_STEPS)) + "#";
+                }
+                else if (inCmd[2] == 'D')  // :XGHD#
+                {
+                    LOG(DEBUG_MOUNT, "[MEADE]: XGHD  -> %s", inCmd.c_str());
+                    return String(_mount->getHomingOffset(StepperAxis::DEC_STEPS)) + "#";
                 }
                 else if (inCmd[2] == 'S')  // :XGHS#
                 {
+                    LOG(DEBUG_MOUNT, "[MEADE]: XGHS  -> %s", inCmd.c_str());
                     return String(inNorthernHemisphere ? "N#" : "S#");
                 }
-            }
-            else if (inCmd.length() > 2 && inCmd[2] == 'D')  // :XGHD#
-            {
-                return String(_mount->getHomingOffset(StepperAxis::DEC_STEPS)) + "#";
+                LOG(DEBUG_MOUNT, "[MEADE]: XGH?  -> %s", inCmd.c_str());
+
+                return "0#";
             }
             else
-
             {
                 char scratchBuffer[10];
                 DayTime ha = _mount->calculateHa();
@@ -1842,7 +1866,6 @@ String MeadeCommandProcessor::handleMeadeExtraCommands(String inCmd)
             }
             else if ((inCmd.length() > 3) && (inCmd[2] == 'P'))  // :XSDP
             {
-                _mount->setDecParkingOffset(inCmd.substring(3).toInt());
             }
             else
             {
@@ -1885,10 +1908,10 @@ String MeadeCommandProcessor::handleMeadeExtraCommands(String inCmd)
                 {
                     _mount->setHomingOffset(StepperAxis::RA_STEPS, inCmd.substring(3).toInt());
                 }
-            }
-            else if (inCmd.length() > 2 && inCmd[2] == 'D')  // :XSHD
-            {
-                _mount->setHomingOffset(StepperAxis::DEC_STEPS, inCmd.substring(3).toInt());
+                else if (inCmd[2] == 'D')  // :XSHD
+                {
+                    _mount->setHomingOffset(StepperAxis::DEC_STEPS, inCmd.substring(3).toInt());
+                }
             }
         }
     }

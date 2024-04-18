@@ -435,6 +435,7 @@
     #endif
 #endif
 
+
 #if (BOARD == BOARD_ESP32_FYSETCE4)
     #if (RA_DRIVER_TYPE != DRIVER_TYPE_TMC2209_UART) || (DEC_DRIVER_TYPE != DRIVER_TYPE_TMC2209_UART)
         #error "FYSETC E4 must have TMC2209_UART configured for any driver used"
@@ -450,3 +451,14 @@
         #endif
     #endif
 #endif
+
+// For OAT, we must have DEC limits defined, otherwise free slew does nto work.
+#ifndef OAM
+    #ifndef DEC_LIMIT_UP
+        #error "You must set DEC_LIMIT_UP to the number of degrees that your OAT can move upwards from the home position."
+    #endif
+    #ifndef DEC_LIMIT_DOWN
+        #error "You must set DEC_LIMIT_DOWN to the number of degrees that your OAT can move downwards from the home position."
+    #endif
+#endif
+
